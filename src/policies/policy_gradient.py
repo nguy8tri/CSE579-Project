@@ -2,15 +2,26 @@ import torch
 import numpy as np
 import math
 from torch import nn, optim
-from utils.layers import network_injector, ElmanRNN
-from common.global_vars import device
+
+from ..utils.layers import network_injector, ElmanRNN
+from ..common.global_vars import device
+from ..utils.rollout import rollout
 
 
 class PGPolicy(nn.Module):
-    def __init__(self, network):
+    def __init__(
+        self,
+        num_inputs,
+        num_outputs,
+        hidden_dim=64,
+        hidden_depth=2,
+        network_type="linear",
+    ):
         super(PGPolicy, self).__init__()
-        self.trunk = network
-    
+        self.trunk = network_injector(
+            num_inputs, hidden_dim, num_outputs * 2, hidden_depth, network_type
+        )
+
     def reset(self):
         if isinstance(self.trunk, ElmanRNN):
             self.trunk.reset()
@@ -36,10 +47,14 @@ class PGPolicy(nn.Module):
 
 
 class PGBaseline(nn.Module):
-    def __init__(self, network):
+    def __init__(
+        self, num_inputs, hidden_dim=64, hidden_depth=2, network_type="linear"
+    ):
         super(PGBaseline, self).__init__()
-        self.trunk = network
-    
+        self.trunk = network_injector(
+            num_inputs, hidden_dim, 1, hidden_depth, network_type
+        )
+
     def reset(self):
         if isinstance(self.trunk, ElmanRNN):
             self.trunk.reset()
@@ -48,16 +63,19 @@ class PGBaseline(nn.Module):
         v = self.trunk(x)
         return v
 
-class PGTrainer():
-    def __init__(self,
-                 env,
-                 policy,
-                 baseline,
-                 num_epochs=200,
-                 batch_size=100,
-                 gamma=0.99,
-                 baseline_batch_size=64,
-                 baseline_num_epochs=5):
+
+class PGTrainer:
+    def __init__(
+        self,
+        env,
+        policy,
+        baseline,
+        num_epochs=200,
+        batch_size=100,
+        gamma=0.99,
+        baseline_batch_size=64,
+        baseline_num_epochs=5,
+    ):
         self.env = env
         self.policy = policy
         self.baseline = baseline
@@ -66,47 +84,48 @@ class PGTrainer():
         self.gamma = gamma
         self.baseline_batch_size = baseline_batch_size
         self.baseline_num_epochs = baseline_num_epochs
-        
+
         self.policy_optim = optim.Adam(self.policy.parameters())
         self.baseline_optim = optim.Adam(self.baseline.parameters())
-    
-    def train_model(self, verbose=True):        
+
+    def train_model(self, verbose=True):
         results_rewards = []
-        results_path_len = []
 
         for iter_num in range(self.num_epochs):
             sample_trajs = []
 
+            self.policy.reset()
+
             # Sampling trajectories
             for it in range(self.batch_size):
-                sample_traj = rollout(
-                    self.env,
-                    self.policy)
+                sample_traj = rollout(self.env, self.policy)
                 sample_trajs.append(sample_traj)
 
-            # Logging returns occasionally
-            rewards_np = np.mean(np.asarray([traj['rewards'].sum() for traj in sample_trajs]))
-            path_length = np.max(np.asarray([traj['rewards'].shape[0] for traj in sample_trajs]))
+            # Calculate rewards
+            rewards_np = np.mean(
+                np.asarray([traj["rewards"].sum() for traj in sample_trajs])
+            )
+
+            # Log returns (every 10 episodes)
             if verbose and iter_num % 10 == 0:
-                print("Episode: {}, reward: {}, max path length: {}".format(iter_num, rewards_np, path_length))
-            
+                print("Episode: {}, reward: {}".format(iter_num, rewards_np))
+
             # Saving data
             results_rewards.append(rewards_np)
-            results_path_len.append(path_length)
 
             # Training model
             self._train_model_(sample_trajs)
 
-        return results_rewards, results_path_len
-    
+        return results_rewards
+
     def _train_model_(self, trajs):
         states_all = []
         actions_all = []
         returns_all = []
         for traj in trajs:
-            states_singletraj = traj['observations']
-            actions_singletraj = traj['actions']
-            rewards_singletraj = traj['rewards']
+            states_singletraj = traj["observations"]
+            actions_singletraj = traj["actions"]
+            rewards_singletraj = traj["rewards"]
             returns_singletraj = np.zeros_like(rewards_singletraj)
             running_returns = 0
             for t in reversed(range(0, len(rewards_singletraj))):
@@ -125,10 +144,12 @@ class PGTrainer():
         criterion = torch.nn.MSELoss()
         n = len(states)
         arr = np.arange(n)
-        for epoch in range(self.baseline_num_epochs):
+        for _ in range(self.baseline_num_epochs):
             np.random.shuffle(arr)
             for i in range(n // self.baseline_batch_size):
-                batch_index = arr[self.baseline_batch_size * i: self.baseline_batch_size * (i + 1)]
+                batch_index = arr[
+                    self.baseline_batch_size * i : self.baseline_batch_size * (i + 1)
+                ]
                 batch_index = torch.LongTensor(batch_index).to(device)
                 inputs = torch.Tensor(states).to(device)[batch_index]
                 target = torch.Tensor(returns).to(device)[batch_index]
@@ -141,9 +162,11 @@ class PGTrainer():
                 self.baseline_optim.step()
 
         _, std, logstd = self.policy(torch.Tensor(states).to(device))
-        log_policy = self.log_density(torch.Tensor(actions).to(device), self.policy.mu, std, logstd)
+        log_policy = self.log_density(
+            torch.Tensor(actions).to(device), self.policy.mu, std, logstd
+        )
         baseline_pred = self.baseline(torch.from_numpy(states).float().to(device))
-        
+
         returns = torch.Tensor(returns).to(device)
         loss = -torch.mean(log_policy * (returns - baseline_pred))
 
@@ -152,9 +175,10 @@ class PGTrainer():
         self.policy_optim.step()
 
         del states, actions, returns, states_all, actions_all, returns_all
-    
+
     def log_density(self, x, mu, std, logstd):
         var = std.pow(2)
-        log_density = -(x - mu).pow(2) / (2 * var) \
-                    - 0.5 * math.log(2 * math.pi) - logstd
+        log_density = (
+            -(x - mu).pow(2) / (2 * var) - 0.5 * math.log(2 * math.pi) - logstd
+        )
         return log_density.sum(1, keepdim=True)

@@ -3,7 +3,7 @@ import numpy as np
 from typing import List, Tuple
 
 
-def gen_ramp_disturbance(positions : List[Tuple[float, float]], X0 = 0, T = 0.005):
+def gen_ramp_disturbance(positions: List[Tuple[float, float]], X0=0, T=0.005):
     """Generates a function that travels from position to position through ramps
 
     Args:
@@ -19,7 +19,11 @@ def gen_ramp_disturbance(positions : List[Tuple[float, float]], X0 = 0, T = 0.00
     last_t = 0
     result = np.array([])
     for next_pos, next_t in positions:
-        next_values = np.arange(last_pos, next_pos, (next_pos - last_pos) / (next_t - last_t) * T) if not next_pos == last_pos else np.array([next_pos] * int((next_t - last_t) / T))
+        next_values = (
+            np.arange(last_pos, next_pos, (next_pos - last_pos) / (next_t - last_t) * T)
+            if not next_pos == last_pos
+            else np.array([next_pos] * int((next_t - last_t) / T))
+        )
         result = np.append(result, next_values, axis=-1)
         last_pos = next_pos
         last_t = next_t

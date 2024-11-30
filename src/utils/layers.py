@@ -1,10 +1,17 @@
-import numpy as np
 import torch
 import torch.nn as nn
+
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
-def mlp(input_dim, hidden_dim, output_dim, hidden_depth, activation=nn.ReLU(inplace=True), output_mod=None):
+def mlp(
+    input_dim,
+    hidden_dim,
+    output_dim,
+    hidden_depth,
+    activation=nn.ReLU(inplace=True),
+    output_mod=None,
+):
     if hidden_depth == 0:
         mods = [nn.Linear(input_dim, output_dim)]
     else:
@@ -17,8 +24,17 @@ def mlp(input_dim, hidden_dim, output_dim, hidden_depth, activation=nn.ReLU(inpl
     trunk = nn.Sequential(*mods)
     return trunk
 
+
 class ElmanRNN(nn.Module):
-    def __init__(self, input_size, hidden_size, output_size, hidden_depth, nonlinearity='tanh', activation=nn.functional.relu):
+    def __init__(
+        self,
+        input_size,
+        hidden_size,
+        output_size,
+        hidden_depth,
+        nonlinearity="tanh",
+        activation=nn.functional.relu,
+    ):
         super().__init__()
         self.rnn = [nn.RNN(input_size, hidden_size, nonlinearity=nonlinearity)]
         for i in range(hidden_depth - 1):
@@ -34,23 +50,27 @@ class ElmanRNN(nn.Module):
 
     def reset(self):
         self.hidden_weights = [None for r in self.rnn]
-        
-def network_injector(num_inputs, hidden_size=64, hidden_depth=2, output_size=1, network='rnn'):
-    if network == 'rnn':
+
+
+def network_injector(
+    num_inputs, hidden_size=64, output_size=1, hidden_depth=2, network="rnn"
+):
+    if network == "rnn":
         return ElmanRNN(num_inputs, hidden_size, output_size, hidden_depth)
     return mlp(num_inputs, hidden_size, output_size, hidden_depth)
+
 
 def weight_init(m):
     """Custom weight init for Linear layers."""
     if isinstance(m, nn.Linear):
         nn.init.orthogonal_(m.weight.data)
-        if hasattr(m.bias, 'data'):
+        if hasattr(m.bias, "data"):
             m.bias.data.fill_(0.0)
+
 
 def soft_update_params(net, target_net, tau):
     for param, target_param in zip(net.parameters(), target_net.parameters()):
-        target_param.data.copy_(tau * param.data +
-                                (1 - tau) * target_param.data)
+        target_param.data.copy_(tau * param.data + (1 - tau) * target_param.data)
 
 
 class eval_mode:
