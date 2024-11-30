@@ -15,6 +15,7 @@ def mlp(
     if hidden_depth == 0:
         mods = [nn.Linear(input_dim, output_dim)]
     else:
+        print(input_dim, output_dim)
         mods = [nn.Linear(input_dim, hidden_dim), activation]
         for i in range(hidden_depth - 1):
             mods += [nn.Linear(hidden_dim, hidden_dim), activation]

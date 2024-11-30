@@ -29,6 +29,7 @@ class PGPolicy(nn.Module):
     def forward(self, x):
         outs = self.trunk(x)
         mu, std, log_std = self.dist_create(outs)
+        print(log_std)
         std = torch.exp(log_std)
         action = torch.normal(mu, std)
         self.mu = mu

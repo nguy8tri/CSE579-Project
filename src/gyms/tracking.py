@@ -1,4 +1,5 @@
 import gymnasium as gym
+from gymnasium import spaces
 import numpy as np
 
 
@@ -23,8 +24,8 @@ class TrackingEnv(gym.Env):
 
     def __init__(
         self,
-        trk_params: TrackingParameters,
-        reference: np.ndarray | None = None,
+        trk_params: TrackingParameters = TrackingParameters(),
+        reference: np.ndarray = None,
         T: float = 0.005,
         render_mode=None,
         scramble_trk_params=True,
@@ -56,6 +57,10 @@ class TrackingEnv(gym.Env):
 
         self.render_mode = render_mode
 
+        # Finally, set the action and observation spaces
+        self.action_space = spaces.Space([1])
+        self.observation_space = spaces.Space([5])
+
     def reset(self, seed=None, options=None):
         # We need the following line to seed self.np_random
         super().reset(seed=seed)
@@ -63,7 +68,14 @@ class TrackingEnv(gym.Env):
         if self.generated_reference:
             self.reference = self._generate_reference_()
         if self.scramble_trk_params:
-            self.trk_params = TrackingParameters(*self.np_random.uniform(0.0, 3.0, 4))
+            self.trk_params = TrackingParameters(
+                self.np_random.uniform(0.1, 2.0),
+                self.np_random.random(),
+                self.np_random.uniform(1.5, 4.0),
+                self.np_random.uniform(0.01, 1.5),
+            )
+
+        return np.array([*self.state[0], self.trk_params.F_supp]), dict()
 
     def step(self, action):
         # Step 0, update the iteration
@@ -92,9 +104,9 @@ class TrackingEnv(gym.Env):
         # Step 5, prepare the observation and return the result
         observation = np.array([*self.state[0], self.trk_params.F_supp])
         reward = -np.abs(self.reference[self.i] - self.state[0, 0])
-        truncated = self.i == len(self.reference) - 1
+        terminated = self.i == len(self.reference) - 1
 
-        return observation, reward, False, truncated, None
+        return observation, reward, terminated, False, dict()
 
     def render(self):
         pass
@@ -124,6 +136,10 @@ class TrackingEnv(gym.Env):
             2 / self.T * (self.state[0, 1] - self.state[1, 1]) - self.state[1, 2]
         )
         # Calculate theta = arcsin((x_p-x_t)/l)
+        if self.reference[self.i] - self.state[0, 0] > self.trk_params.l:
+            raise ValueError(
+                f"The system has entered an invalid state (r - x = {self.reference[self.i] - self.state[0, 0]}, which is greater than the harness length {self.trk_params.l})"
+            )
         self.state[0, 3] = np.arcsin(
             (self.reference[self.i] - self.state[0, 0]) / self.trk_params.l
         )

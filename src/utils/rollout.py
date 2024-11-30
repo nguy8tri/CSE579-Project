@@ -1,10 +1,10 @@
 import torch
 import numpy as np
+import copy
 
-from utils.layers import eval_mode
+from .layers import eval_mode
 
 from ..common.global_vars import device
-from ..policies.policy_gradient import PGPolicy
 
 
 def rollout(
@@ -28,6 +28,8 @@ def rollout(
 
     while not done:
         o_for_agent = o.copy()
+        from ..policies.policy_gradient import PGPolicy
+
         if isinstance(agent, PGPolicy):
             o_for_agent = torch.from_numpy(o_for_agent[None]).to(device).float()
             action, _, _ = agent(o_for_agent)
