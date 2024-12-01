@@ -7,7 +7,7 @@ from ..common.global_vars import MODEL_DIR, TRACKING_GYM
 
 
 def train_pg():
-    env = TrackingEnv()
+    env = gym.make(TRACKING_GYM)
     input_size = env.observation_space.shape[0]
     output_size = env.action_space.shape[0]
 

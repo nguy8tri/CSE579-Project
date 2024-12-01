@@ -16,8 +16,8 @@
 # )
 
 # # Generate the environment
-# env = TrackingEnv(trk_params, reference=reference)
-# # env = gym.make(TRACKING_GYM)
+# # env = TrackingEnv(trk_params, reference=reference)
+# env = gym.make(TRACKING_GYM)
 
 # env.reset()
 
@@ -25,21 +25,22 @@
 # policy = TrackingReferencePolicy(trk_params)
 
 # # Begin Evaluation
-# observation, _, terminated, _, _ = env.step(0)  # Generate first step
+# observation, _, terminated, truncated, _ = env.step(0)  # Generate first step
 
 # x_t = [0]  # Keep this buffer for seeing the system position over time
 
-# while not terminated:
+# while not (terminated or truncated):
 #     action = policy(observation)  # Get the action
 
 #     x_t.append(observation[0])  # Record position
 
-#     observation, _, terminated, _, _ = env.step(action)  # Get next observation
+#     observation, _, terminated, truncated, _ = env.step(action)  # Get next observation
 
 # # Plot Response
 # plt.figure()
-# plt.plot(t, reference, label="Reference")
-# plt.plot(t, x_t, label="Response")
+# plt.plot(env.env.env.env.reference, label="Reference")
+# # plt.plot(env.reference, label="Reference")
+# plt.plot(x_t, label="Response")
 # plt.legend()
 # plt.show()
 

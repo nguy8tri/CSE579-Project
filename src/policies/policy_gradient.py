@@ -3,7 +3,7 @@ import numpy as np
 import math
 from torch import nn, optim
 
-from ..utils.layers import network_injector, ElmanRNN
+from ..utils.layers import network_injector, ElmanRNN, weight_init
 from ..common.global_vars import device
 from ..utils.rollout import rollout
 
@@ -13,14 +13,15 @@ class PGPolicy(nn.Module):
         self,
         num_inputs,
         num_outputs,
-        hidden_dim=64,
-        hidden_depth=2,
+        hidden_dim=5,
+        hidden_depth=0,
         network_type="linear",
     ):
         super(PGPolicy, self).__init__()
         self.trunk = network_injector(
             num_inputs, hidden_dim, num_outputs * 2, hidden_depth, network_type
         )
+        self.apply(weight_init)
 
     def reset(self):
         if isinstance(self.trunk, ElmanRNN):
@@ -29,7 +30,6 @@ class PGPolicy(nn.Module):
     def forward(self, x):
         outs = self.trunk(x)
         mu, std, log_std = self.dist_create(outs)
-        print(log_std)
         std = torch.exp(log_std)
         action = torch.normal(mu, std)
         self.mu = mu
@@ -55,6 +55,7 @@ class PGBaseline(nn.Module):
         self.trunk = network_injector(
             num_inputs, hidden_dim, 1, hidden_depth, network_type
         )
+        self.apply(weight_init)
 
     def reset(self):
         if isinstance(self.trunk, ElmanRNN):
@@ -86,16 +87,21 @@ class PGTrainer:
         self.baseline_batch_size = baseline_batch_size
         self.baseline_num_epochs = baseline_num_epochs
 
-        self.policy_optim = optim.Adam(self.policy.parameters())
-        self.baseline_optim = optim.Adam(self.baseline.parameters())
+        self.policy_optim = optim.Adam(self.policy.parameters(), lr=0.1)
+        self.baseline_optim = optim.Adam(self.baseline.parameters(), lr=0.1)
 
     def train_model(self, verbose=True):
         results_rewards = []
+        results_path_len = []
 
         for iter_num in range(self.num_epochs):
             sample_trajs = []
 
             self.policy.reset()
+
+            for param in self.policy.parameters():
+                if param.grad is not None:
+                    print(param)
 
             # Sampling trajectories
             for it in range(self.batch_size):
@@ -104,20 +110,28 @@ class PGTrainer:
 
             # Calculate rewards
             rewards_np = np.mean(
-                np.asarray([traj["rewards"].sum() for traj in sample_trajs])
+                np.asarray([traj["rewards"].mean() for traj in sample_trajs])
+            )
+            path_length = np.max(
+                np.asarray([traj["rewards"].shape[0] for traj in sample_trajs])
             )
 
-            # Log returns (every 10 episodes)
+            # Log returns (every episodes)
             if verbose and iter_num % 10 == 0:
-                print("Episode: {}, reward: {}".format(iter_num, rewards_np))
+                print(
+                    "Episode: {}, reward: {}, max path len: {}".format(
+                        iter_num, rewards_np, path_length
+                    )
+                )
 
             # Saving data
             results_rewards.append(rewards_np)
+            results_path_len.append(path_length)
 
             # Training model
             self._train_model_(sample_trajs)
 
-        return results_rewards
+        return results_rewards, results_path_len
 
     def _train_model_(self, trajs):
         states_all = []
@@ -166,6 +180,7 @@ class PGTrainer:
         log_policy = self.log_density(
             torch.Tensor(actions).to(device), self.policy.mu, std, logstd
         )
+
         baseline_pred = self.baseline(torch.from_numpy(states).float().to(device))
 
         returns = torch.Tensor(returns).to(device)

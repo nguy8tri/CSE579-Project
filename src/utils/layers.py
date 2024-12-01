@@ -15,7 +15,6 @@ def mlp(
     if hidden_depth == 0:
         mods = [nn.Linear(input_dim, output_dim)]
     else:
-        print(input_dim, output_dim)
         mods = [nn.Linear(input_dim, hidden_dim), activation]
         for i in range(hidden_depth - 1):
             mods += [nn.Linear(hidden_dim, hidden_dim), activation]
@@ -64,7 +63,7 @@ def network_injector(
 def weight_init(m):
     """Custom weight init for Linear layers."""
     if isinstance(m, nn.Linear):
-        nn.init.orthogonal_(m.weight.data)
+        m.weight.data.fill_(20.0)
         if hasattr(m.bias, "data"):
             m.bias.data.fill_(0.0)
 
