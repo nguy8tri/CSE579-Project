@@ -8,8 +8,9 @@ batch_rewards_pg = []
 batch_rewards = []
 velocities = []
 angles = []
+actions = []
 
-def return_handler(velocity = None, angle = None, policy_loss = None, critic_loss = None, batch_reward=None, batch_reward_pg=None, plot=False):
+def return_handler(action = None, velocity = None, angle = None, policy_loss = None, critic_loss = None, batch_reward=None, batch_reward_pg=None, plot=False):
     # Record data if requested
     if policy_loss is not None:
         policy_losses.extend(policy_loss)
@@ -28,6 +29,9 @@ def return_handler(velocity = None, angle = None, policy_loss = None, critic_los
     
     if angle is not None:
         angles.append(angle)
+
+    if action is not None:
+        actions.append(action)
 
     # Plot data if requested
     if plot:
@@ -54,7 +58,16 @@ def return_handler(velocity = None, angle = None, policy_loss = None, critic_los
             ax = plt.gca()
             ax.set_xlim([0, len(angles)])
         
-
+        plt.figure(figsize=(10, 12))
+        if actions:
+            # Plot
+            plt.plot(actions, label='Action')
+            plt.xlabel('Training Steps')
+            plt.ylabel('Force (N)')
+            plt.title('Action over Time')
+            plt.legend()
+            ax = plt.gca()
+            ax.set_xlim([0, len(actions)])
 
         plt.figure(figsize=(10, 12))
         if batch_rewards:

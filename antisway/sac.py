@@ -3,6 +3,7 @@ import torch.nn.functional as F
 
 from agents import GenericACAgent
 
+from return_handler import return_handler
 
 class SACAgent(GenericACAgent):
     def update_actor(self, obs):        
@@ -59,6 +60,8 @@ class SACAgent(GenericACAgent):
 
         Q1, Q2 = self.critic(obs, action)
         critic_loss = F.mse_loss(Q1, target_Q) + F.mse_loss(Q2, target_Q)
+
+        
 
         #========== TODO: end ==========
         # Optimize the critic

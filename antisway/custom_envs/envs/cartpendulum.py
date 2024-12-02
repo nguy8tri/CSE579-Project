@@ -124,10 +124,10 @@ class CartPendulumEnv(MujocoEnv, utils.EzPickle):
         pole_angular_velocity = observation[3]
 
         terminated = bool(
-            not np.isfinite(observation).all() or (np.abs(pole_angle) > .3) or cart_position > 1.5
+            not np.isfinite(observation).all() or (np.abs(pole_angle) > .2) or cart_position > 1.5
         )
 
-        reward = self.reward_function(cart_position, pole_angle, cart_velocity, pole_angular_velocity)  
+        reward = self.reward_function(action, cart_position, pole_angle, cart_velocity, pole_angular_velocity)  
 
 
         info = {"reward_survive": reward}
@@ -137,7 +137,7 @@ class CartPendulumEnv(MujocoEnv, utils.EzPickle):
         
         # truncation=False as the time limit is handled by the `TimeLimit` wrapper added during `make`
 
-        return_handler(velocity = cart_velocity, angle = pole_angle)
+        return_handler(velocity = cart_velocity, angle = pole_angle, action = action)
 
         return observation, reward, terminated, False, info
 
@@ -168,48 +168,29 @@ class CartPendulumEnv(MujocoEnv, utils.EzPickle):
     
 
 
-    def reward_function(self, cart_position, pole_angle, cart_velocity, pole_angular_velocity):
+    def reward_function(self, action, cart_position, pole_angle, cart_velocity, pole_angular_velocity):
+
+        target_velocity = 0.2
         
-        target_vel = 0.225
+        angle_penalty_factor = 2.0
+        velocity_penalty_factor = 0.5
+        target_velocity_penalty_factor = 2.0
+        angular_velocity_penalty_factor = 1.0
 
-        # Reward components
-        velocity_reward = -4*abs(cart_velocity - target_vel)  # Encourage reaching the target velocity
-        angle_penalty = -2.0 * (pole_angle ** 2)  # Penalize pendulum swinging
-        angular_velocity_penalty = -2.0 * (pole_angular_velocity ** 2)  # Penalize pendulum oscillation
+        # Penalize large angle
+        angle_penalty = abs(pole_angle) * angle_penalty_factor
 
-        reward = velocity_reward + angle_penalty + angular_velocity_penalty
-        
-        if cart_position < 0:
-            reward -= cart_position**2
+        # Penalize angular velocity (swing)
+        angular_velocity_penalty = abs(pole_angular_velocity) * angular_velocity_penalty_factor
 
-        if np.abs(cart_velocity - target_vel) <= 0.025 * target_vel:
-            reward += 2.0
-        elif (np.abs(cart_velocity - target_vel) <= 0.15 * target_vel): 
-            reward += 0.05
+        # Reward for reaching and maintaining target velocity
+        velocity_penalty = abs(cart_velocity - target_velocity) * velocity_penalty_factor
+        target_velocity_penalty = target_velocity_penalty_factor * max(0, 1 - velocity_penalty)
 
+        reward = -angle_penalty - angular_velocity_penalty - velocity_penalty + target_velocity_penalty
 
-        
+        # Small negative reward for energy efficiency or large actions
+        energy_penalty = -abs(action) * 0.01  # Penalize large actions
+        reward += energy_penalty
+
         return reward
-    
-    '''def reward_function(self, cart_position, pole_angle, cart_velocity, pole_angular_velocity):
-        
-        target_vel = 0.2
-
-        # Reward components
-        velocity_reward = -15*abs(cart_velocity - target_vel)  # Encourage reaching the target velocity
-        angle_penalty = -20.0 * (pole_angle ** 2)  # Penalize pendulum swinging
-        angular_velocity_penalty = -20.0 * (pole_angular_velocity ** 2)  # Penalize pendulum oscillation
-
-        reward = velocity_reward + angle_penalty + angular_velocity_penalty
-        
-        if cart_position < 0:
-            reward -= cart_position**2
-
-        if np.abs(cart_velocity - target_vel) <= 0.02 * target_vel:
-            reward += 10.0
-        elif (np.abs(cart_velocity - target_vel) <= 0.2 * target_vel): 
-            reward += 0.5
-
-
-        
-        return reward'''

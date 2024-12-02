@@ -35,7 +35,7 @@ if __name__ == '__main__':
         os.environ["LD_PRELOAD"] = "/usr/lib/x86_64-linux-gnu/libGLEW.so"
     if args.env == 'cartpendulum':
         env = gym.make("custom_envs/CartPendulum-v0", render_mode='human' if args.render else None)
-        max_episode_steps = 200
+        max_episode_steps = 600
         env = gym.wrappers.TimeLimit(env, max_episode_steps=max_episode_steps)
     else:
         raise ValueError('Invalid environment')
@@ -60,7 +60,7 @@ if __name__ == '__main__':
         baseline.to(device)
 
         # Training hyperparameters
-        num_epochs = 200
+        num_epochs = 100
         batch_size = 64
         gamma = 0.99
         baseline_train_batch_size = 64
@@ -82,8 +82,8 @@ if __name__ == '__main__':
         
         evaluate(env, policy, num_validation_runs=100, render=args.render)
     else:
-        num_train_steps = 30_000
-        num_seed_steps = 10_000
+        num_train_steps = 20_000
+        num_seed_steps = 5_000
         eval_frequency = 10_000
         num_eval_episodes = 10
         replay_buffer = ReplayBuffer(obs_size, ac_size, num_train_steps, device)
