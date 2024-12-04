@@ -33,7 +33,12 @@ def generate_random_reference(T=0.005):
     return samples
 
 
-functions = [lambda x: x, lambda x: x * x, lambda x: np.sin(x), lambda x: np.exp(x)]
+functions = [
+    lambda x: x,
+    lambda x: x * x,
+    lambda x: np.sin(x),
+    lambda x: np.tan(0.4 * x),
+]
 
 references = (
     [reference]
@@ -82,7 +87,7 @@ def evaluate(policy_path, plot_path, title):
     t = get_timestamp()
 
     # Get initial tracking params
-    trk_params = generate_trk_params()
+    trk_params = TrackingParameters()
 
     fig, axs = plt.subplots(3, 3)
     fig.suptitle(title)
@@ -108,9 +113,9 @@ def evaluate(policy_path, plot_path, title):
         row = i // 3
         col = i % 3
 
-        axs[row, col].plot(t, r, label="ref")
-        axs[row, col].plot(t, response_ref, "-", label="res_ref")
-        axs[row, col].plot(t, response_test, "--", label="res_tst")
+        axs[row, col].plot(t, r, label="Reference")
+        axs[row, col].plot(t, response_ref, "-", label="Control Policy")
+        axs[row, col].plot(t, response_test, "--", label="BC Policy")
         if i == 0:
             axs[row, col].legend()
 
