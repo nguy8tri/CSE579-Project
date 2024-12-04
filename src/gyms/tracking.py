@@ -76,6 +76,7 @@ class TrackingEnv(gym.Env):
         # We need the following line to seed self.np_random
         super().reset(seed=seed)
         self.i = -1
+        reference, trk_params = None, None
         if options is not None:
             reference = options["reference"] if "reference" in options else None
             trk_params = options["trk_params"] if "trk_params" in options else None

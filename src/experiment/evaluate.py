@@ -107,6 +107,9 @@ def evaluate(policy_path, plot_path, title):
             env, policy_test, r, trk_params
         )
 
+        print(
+            f"System Parameters -> M_t: {trk_params.M_t}, M_p: {trk_params.M_p}, F_supp: {trk_params.F_supp}, l: {trk_params.l}"
+        )
         print(f"Reference -> Reward: {reward_ref}, Angle: {max_ang_ref}")
         print(f"Test -> Reward: {reward_test}, Angle: {max_ang_tst}")
 

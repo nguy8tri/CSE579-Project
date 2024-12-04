@@ -5,7 +5,7 @@
 # from .gyms.tracking import TrackingEnv, TrackingParameters
 # from .tracking.reference_generator import gen_ramp_disturbance
 # from .tracking.reference_policy import TrackingReferencePolicy
-# from .common.global_vars import MODEL_DIR
+# from .common.global_vars import MODEL_DIR, device
 # from .policies.policy_gradient import PGPolicy
 # from .policies.q_learning import ActorCriticAgent
 
@@ -24,9 +24,20 @@
 # env.reset()
 
 # # Generate the policy
-# policy = TrackingReferencePolicy(trk_params)
-# policy = torch.load(MODEL_DIR + "behavior_cloning.pth")
+# # policy = TrackingReferencePolicy(trk_params)
+# # policy = torch.load(MODEL_DIR + "policy_gradient.pth")
 # # policy = PGPolicy(5, 2, reference_controller=TrackingReferencePolicy())
+# agent = ActorCriticAgent(
+#     5,
+#     1,
+#     [
+#         float(env.action_space.low.min()),
+#         float(env.action_space.high.max()),
+#     ],
+#     device,
+# )
+# agent.load(MODEL_DIR + "actor_critic.pth")
+# policy = agent.actor
 
 # # Begin Evaluation
 # observation, reward, terminated, truncated, _ = env.step(0)  # Generate first step
@@ -36,7 +47,7 @@
 
 # while not (terminated or truncated):
 #     # action = policy(observation)  # Get the action
-#     action = policy(torch.from_numpy(observation))
+#     action, _, _ = policy(torch.from_numpy(observation))
 #     # action = policy.mu
 #     action = action.item()
 #     observation, reward, terminated, truncated, _ = env.step(
@@ -54,6 +65,9 @@
 
 # # Plot Response
 # plt.figure()
+# plt.title("Policy Gradient Response")
+# plt.xlabel("Time (s)")
+# plt.ylabel("Position (m)")
 # plt.plot(env.env.env.env.reference, label="Reference")
 # # plt.plot(env.reference, label="Reference")
 # plt.plot(x_t, label="Response")
