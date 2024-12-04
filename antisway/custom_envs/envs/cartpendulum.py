@@ -125,6 +125,7 @@ class CartPendulumEnv(MujocoEnv, utils.EzPickle):
 
         terminated = bool(
             not np.isfinite(observation).all() or (np.abs(pole_angle) > .2) or cart_position > 1.5
+            #not np.isfinite(observation).all() or (np.abs(pole_angle) > 0.05236) or cart_position > 1.5
         )
 
         reward = self.reward_function(action, cart_position, pole_angle, cart_velocity, pole_angular_velocity)  
@@ -137,7 +138,7 @@ class CartPendulumEnv(MujocoEnv, utils.EzPickle):
         
         # truncation=False as the time limit is handled by the `TimeLimit` wrapper added during `make`
 
-        return_handler(velocity = cart_velocity, angle = pole_angle, action = action)
+        return_handler(velocity_rl = cart_velocity, angle_rl = pole_angle, action_rl = action)
 
         return observation, reward, terminated, False, info
 
@@ -156,7 +157,7 @@ class CartPendulumEnv(MujocoEnv, utils.EzPickle):
         self.set_state(qpos, qvel)
 
         observation = self._get_obs()
-        return_handler(velocity=observation[2],angle=observation[1])
+        return_handler(velocity_rl=observation[2],angle_rl=observation[1])
         #return_handler(plot = True)
 
         return self._get_obs()
@@ -167,6 +168,40 @@ class CartPendulumEnv(MujocoEnv, utils.EzPickle):
         return np.concatenate([self.data.qpos, self.data.qvel]).ravel()
     
 
+
+
+    def reward_function(self, action, cart_position, pole_angle, cart_velocity, pole_angular_velocity):
+
+        target_velocity = 0.2
+        
+        angle_penalty_factor = 4.0
+        velocity_penalty_factor = 0.5
+        target_velocity_penalty_factor = 2.0
+        angular_velocity_penalty_factor = 1.0
+
+        # Penalize large angle
+        angle_penalty = abs(pole_angle) * angle_penalty_factor
+
+        # Penalize angular velocity (swing)
+        angular_velocity_penalty = abs(pole_angular_velocity) * angular_velocity_penalty_factor
+
+        # Reward for reaching and maintaining target velocity
+        velocity_penalty = abs(cart_velocity - target_velocity) * velocity_penalty_factor
+        target_velocity_penalty = target_velocity_penalty_factor * max(0, 1 - velocity_penalty)
+
+        reward = -angle_penalty - angular_velocity_penalty - velocity_penalty + target_velocity_penalty
+
+        # Small negative reward for energy efficiency or large actions
+        #energy_penalty = -abs(action) * 0.1  # Penalize large actions
+        #reward += energy_penalty
+
+        return reward
+
+
+
+
+    '''
+    This reward function is working but can prob be improved
 
     def reward_function(self, action, cart_position, pole_angle, cart_velocity, pole_angular_velocity):
 
@@ -194,3 +229,36 @@ class CartPendulumEnv(MujocoEnv, utils.EzPickle):
         reward += energy_penalty
 
         return reward
+        
+
+
+
+    This one works better than the previous one
+
+    def reward_function(self, action, cart_position, pole_angle, cart_velocity, pole_angular_velocity):
+
+        target_velocity = 0.2
+        
+        angle_penalty_factor = 4.0
+        velocity_penalty_factor = 0.5
+        target_velocity_penalty_factor = 2.0
+        angular_velocity_penalty_factor = 1.0
+
+        # Penalize large angle
+        angle_penalty = abs(pole_angle) * angle_penalty_factor
+
+        # Penalize angular velocity (swing)
+        angular_velocity_penalty = abs(pole_angular_velocity) * angular_velocity_penalty_factor
+
+        # Reward for reaching and maintaining target velocity
+        velocity_penalty = abs(cart_velocity - target_velocity) * velocity_penalty_factor
+        target_velocity_penalty = target_velocity_penalty_factor * max(0, 1 - velocity_penalty)
+
+        reward = -angle_penalty - angular_velocity_penalty - velocity_penalty + target_velocity_penalty
+
+        # Small negative reward for energy efficiency or large actions
+        energy_penalty = -abs(action) * 0.1  # Penalize large actions
+        reward += energy_penalty
+
+        return reward
+        '''

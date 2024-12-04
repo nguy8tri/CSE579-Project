@@ -12,6 +12,7 @@ from actor_critic import ActorCriticAgent
 from rollouts import evaluate, evaluate_agent
 from policy_gradient import simulate_policy_pg
 from networks import PGPolicy, PGBaseline
+from controller_sim import ctrl_sim
 
 from return_handler import return_handler
 
@@ -24,18 +25,27 @@ torch.manual_seed(0)
 random.seed(0)
 np.random.seed(0)
 
-if __name__ == '__main__':
+if __name__ == '__main__': 
     parser = argparse.ArgumentParser()
     parser.add_argument('--task', type=str, default='pg', help='choose task, pg or actor_critic or sac')
-    parser.add_argument('--test', action='store_true', default=False)
+    parser.add_argument('--test', nargs='?', const=10, type=int, help='Run ___ epidosed trials')
     parser.add_argument('--render', action='store_true', default=False)
     parser.add_argument('--env', type=str, default="pendulum", help='choose environment, pendulum or ant')
+    parser.add_argument('--compare', action='store_true', default=False)
+
     args = parser.parse_args()
+    if args.compare:
+        param_file = 'controller_sim_params.txt'
+        sim = ctrl_sim(param_file)
+        reset_noise_scale = 0.0   # no noise scale when comparing to controller
+        args.test = 1   # set number of episodes to 1 for comparison
+    else:
+        reset_noise_scale = 0.01
     if args.render:
         os.environ["LD_PRELOAD"] = "/usr/lib/x86_64-linux-gnu/libGLEW.so"
     if args.env == 'cartpendulum':
-        env = gym.make("custom_envs/CartPendulum-v0", render_mode='human' if args.render else None)
-        max_episode_steps = 600
+        env = gym.make("custom_envs/CartPendulum-v0", reset_noise_scale=reset_noise_scale,render_mode='human' if args.render else None)
+        max_episode_steps = 1000
         env = gym.wrappers.TimeLimit(env, max_episode_steps=max_episode_steps)
     else:
         raise ValueError('Invalid environment')
@@ -45,6 +55,8 @@ if __name__ == '__main__':
     action_range = [
         float(env.action_space.low.min()),
         float(env.action_space.high.max())]
+
+    num_episodes = 20 # default number of episodes to evaluate
 
     if args.task == 'pg':
         # Define policy and value function
@@ -82,7 +94,7 @@ if __name__ == '__main__':
         
         evaluate(env, policy, num_validation_runs=100, render=args.render)
     else:
-        num_train_steps = 20_000
+        num_train_steps = 30_000
         num_seed_steps = 5_000
         eval_frequency = 10_000
         num_eval_episodes = 10
@@ -149,11 +161,14 @@ if __name__ == '__main__':
             agent.save(f'{args.task}_final.pth')
 
         else:
+            num_episodes = args.test
             print('loading pretrained', args.task)
             agent.load(f'{args.task}_final.pth')
 
         # final evaluation
-        evaluate_agent(env, agent, "final", num_episodes=100, verbose=True)
+        evaluate_agent(env, agent, "final", num_episodes=num_episodes, verbose=True)
+
+
 
     return_handler(plot=True)
 

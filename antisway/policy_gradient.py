@@ -41,18 +41,11 @@ def train_model(policy, baseline, trajs, policy_optim, baseline_optim, device, g
             batch_index = arr[baseline_train_batch_size * i: baseline_train_batch_size * (i + 1)]
             batch_index = torch.LongTensor(batch_index).to(device)
             inputs = torch.Tensor(states).to(device)[batch_index]
-            target = torch.Tensor(returns).to(device)[batch_index]
-            
-            #========== TODO: start ==========
-            # Train baseline by regressing onto returns.
-            # Hint: Regress the baseline from each state onto the above
-            # computed return to go. You can use similar code to behavior cloning to do so. This should be
-            # 2 lines of code
+            target = torch.Tensor(returns).to(device)[batch_index]    
 
             prediction = baseline(inputs)
             loss = criterion(prediction, target)
 
-            #========== TODO: END ==========
             baseline_optim.zero_grad()
             loss.backward()
             baseline_optim.step()
@@ -60,19 +53,11 @@ def train_model(policy, baseline, trajs, policy_optim, baseline_optim, device, g
     action, std, logstd = policy(torch.Tensor(states).to(device))
     log_policy = log_density(torch.Tensor(actions).to(device), policy.mu, std, logstd)
     baseline_pred = baseline(torch.from_numpy(states).float().to(device))                  # compute final baseline prediction
-    #========== TODO: start ==========
-    # Train policy by optimizing surrogate objective: -log prob * (return - baseline)
-    # Hint: Policy gradient is given by: \grad log prob(a|s)* (return - baseline)
-    # Hint: Return is computed above, you can compute log_probs using the log_density function imported.
-    # Hint: You can predict what the baseline outputs for every state.
-    # Hint: Then simply compute the surrogate objective by taking the objective as -log prob * (return - baseline)
-    # Hint: You can then use standard pytorch machinery to take *one* gradient step on the policy
 
     log_probs = log_density(torch.Tensor(actions).to(device),policy.mu, std, logstd)
 
     loss = (-log_probs * (torch.Tensor(returns).to(device) - baseline_pred)).mean()
 
-    #========== TODO: END ==========
     policy_optim.zero_grad()
     loss.backward()
     policy_optim.step()

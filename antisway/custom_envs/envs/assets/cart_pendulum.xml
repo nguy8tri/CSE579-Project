@@ -6,7 +6,7 @@
 		<tendon/>
 		<motor/>
 	</default>
-	<option gravity="0 0 -9.81" integrator="RK4" timestep="0.01"/>
+	<option gravity="0 0 -9.81" integrator="RK4" timestep="0.005"/>
 	<size nstack="3000"/>		
 
 	<worldbody>		
