@@ -1,10 +1,11 @@
+from matplotlib import pyplot as plt
 import torch
 import numpy as np
 import math
 from torch import nn, optim
 
-from ..utils.layers import network_injector, ElmanRNN, weight_init
-from ..common.global_vars import device
+from ..utils.layers import network_injector, ElmanRNN
+from ..common.global_vars import TRACKING_PATH_LEN, device
 from ..utils.rollout import rollout
 
 
@@ -16,12 +17,17 @@ class PGPolicy(nn.Module):
         hidden_dim=5,
         hidden_depth=0,
         network_type="linear",
+        reference_controller=None,
     ):
         super(PGPolicy, self).__init__()
         self.trunk = network_injector(
-            num_inputs, hidden_dim, num_outputs * 2, hidden_depth, network_type
+            num_inputs,
+            hidden_dim,
+            num_outputs * 2,
+            hidden_depth,
+            network_type,
+            reference_controller,
         )
-        self.apply(weight_init)
 
     def reset(self):
         if isinstance(self.trunk, ElmanRNN):
@@ -39,7 +45,6 @@ class PGPolicy(nn.Module):
         min_log_std = -5
         max_log_std = 5
         loc, scale = torch.split(logits, logits.shape[-1] // 2, dim=-1)
-        loc = torch.tanh(loc)
 
         log_std = torch.sigmoid(scale)
         log_std = min_log_std + log_std * (max_log_std - min_log_std)
@@ -55,7 +60,6 @@ class PGBaseline(nn.Module):
         self.trunk = network_injector(
             num_inputs, hidden_dim, 1, hidden_depth, network_type
         )
-        self.apply(weight_init)
 
     def reset(self):
         if isinstance(self.trunk, ElmanRNN):
@@ -72,7 +76,7 @@ class PGTrainer:
         env,
         policy,
         baseline,
-        num_epochs=200,
+        num_epochs=2000,
         batch_size=100,
         gamma=0.99,
         baseline_batch_size=64,
@@ -87,12 +91,14 @@ class PGTrainer:
         self.baseline_batch_size = baseline_batch_size
         self.baseline_num_epochs = baseline_num_epochs
 
-        self.policy_optim = optim.Adam(self.policy.parameters(), lr=0.1)
-        self.baseline_optim = optim.Adam(self.baseline.parameters(), lr=0.1)
+        self.policy_optim = optim.Adam(self.policy.parameters())
+        self.baseline_optim = optim.Adam(self.baseline.parameters())
 
     def train_model(self, verbose=True):
         results_rewards = []
         results_path_len = []
+        losses = 0
+        losses_count = 0
 
         for iter_num in range(self.num_epochs):
             sample_trajs = []
@@ -100,13 +106,23 @@ class PGTrainer:
             self.policy.reset()
 
             for param in self.policy.parameters():
-                if param.grad is not None:
-                    print(param)
+                print(param)
 
             # Sampling trajectories
-            for it in range(self.batch_size):
+            it = 0
+            skipped = 0
+            while it < self.batch_size:
                 sample_traj = rollout(self.env, self.policy)
-                sample_trajs.append(sample_traj)
+                if len(sample_traj["observations"]) == TRACKING_PATH_LEN:
+                    sample_trajs.append(sample_traj)
+                    it += 1
+                elif it < self.batch_size // 5:
+                    sample_trajs.append(sample_traj)
+                    it += 1
+                else:
+                    skipped += 1
+
+            print(f"Trajectories Thrown Out: {skipped}")
 
             # Calculate rewards
             rewards_np = np.mean(
@@ -116,8 +132,17 @@ class PGTrainer:
                 np.asarray([traj["rewards"].shape[0] for traj in sample_trajs])
             )
 
+            # if path_length == TRACKING_PATH_LEN:
+            #     for traj in sample_trajs:
+            #         if len(traj["observations"][:, 0]) == TRACKING_PATH_LEN:
+            #             plt.figure()
+            #             plt.plot(self.env.env.env.env.reference, label="Reference")
+            #             plt.plot(traj["observations"][:, 0], label="Response")
+            #             plt.legend()
+            #             plt.show()
+
             # Log returns (every episodes)
-            if verbose and iter_num % 10 == 0:
+            if verbose and iter_num % 1 == 0:
                 print(
                     "Episode: {}, reward: {}, max path len: {}".format(
                         iter_num, rewards_np, path_length
@@ -129,11 +154,11 @@ class PGTrainer:
             results_path_len.append(path_length)
 
             # Training model
-            self._train_model_(sample_trajs)
+            self._train_model_(sample_trajs, losses, losses_count)
 
         return results_rewards, results_path_len
 
-    def _train_model_(self, trajs):
+    def _train_model_(self, trajs, losses, losses_count):
         states_all = []
         actions_all = []
         returns_all = []
@@ -185,9 +210,13 @@ class PGTrainer:
 
         returns = torch.Tensor(returns).to(device)
         loss = -torch.mean(log_policy * (returns - baseline_pred))
+        losses += loss
+        losses_count += 1
+        total_loss = losses / losses_count
 
         self.policy_optim.zero_grad()
-        loss.backward()
+        total_loss.backward()
+        print(loss)
         self.policy_optim.step()
 
         del states, actions, returns, states_all, actions_all, returns_all

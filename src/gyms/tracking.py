@@ -11,7 +11,7 @@ class TrackingParameters:
     def __init__(
         self,
         l: float = 0.47,
-        frac_supp: float = 0.0,
+        frac_supp: float = 1.0,
         M_t: float = 2.092,
         M_p: float = 0.765,
     ):
@@ -30,7 +30,8 @@ class TrackingEnv(gym.Env):
         reference: np.ndarray = None,
         T: float = 0.005,
         render_mode=None,
-        scramble_trk_params=True,
+        scramble_trk_params=False,
+        reset_reference=False,
     ):
         # Tracking Parameters
         self.trk_params = trk_params
@@ -47,20 +48,22 @@ class TrackingEnv(gym.Env):
 
         # Reference
         self.reference = (
-            reference if reference is not None else self._generate_reference_()
+            np.array(reference)
+            if reference is not None
+            else self._generate_reference_()
         )
 
         # Iteration
         self.i = -1
 
         # Reset Options
-        self.generated_reference = reference is None
+        self.reset_reference = reset_reference
         self.scramble_trk_params = scramble_trk_params  #
 
         self.render_mode = render_mode
 
         # Finally, set the action and observation spaces
-        self.action_space = spaces.Box(-np.inf, np.inf, [1])
+        self.action_space = spaces.Box(-80, 80, [1])
         self.observation_space = spaces.Box(
             -np.inf,
             np.inf,
@@ -73,18 +76,26 @@ class TrackingEnv(gym.Env):
         # We need the following line to seed self.np_random
         super().reset(seed=seed)
         self.i = -1
-        # if self.generated_reference:
-        #     self.reference = self._generate_reference_()
-        # if self.scramble_trk_params:
-        #     self.trk_params = TrackingParameters(
-        #         self.np_random.uniform(0.1, 2.0),
-        #         self.np_random.random(),
-        #         self.np_random.uniform(1.5, 4.0),
-        #         self.np_random.uniform(0.01, 1.5),
-        #     )
+        if options is not None:
+            reference = options["reference"] if "reference" in options else None
+            trk_params = options["trk_params"] if "trk_params" in options else None
+        if reference is not None:
+            self.reference = reference
+        elif self.reset_reference:
+            self.reference = self._generate_reference_()
+        if trk_params is not None:
+            self.trk_params = trk_params
+        elif self.scramble_trk_params:
+            self.trk_params = TrackingParameters(
+                self.np_random.uniform(0.1, 2.0),
+                self.np_random.random(),
+                self.np_random.uniform(1.5, 4.0),
+                self.np_random.uniform(0.01, 1.5),
+            )
 
         # A state is just [x_t, v_t, a_t, theta] + F_supp
         # There are 3 levels for tustin transform
+        # Assumption: theta_init = 0
         self.state = np.zeros((3, 4))
 
         # The action is just F_out (again, 3 levels for calulcation)
@@ -98,6 +109,10 @@ class TrackingEnv(gym.Env):
     def step(self, action):
         # Step 0, update the iteration
         self.i += 1
+
+        while hasattr(action, "__iter__"):
+            assert len(action) == 1
+            action = action[0]
 
         # Step 1, push action into vector and push state vector
         self.action = np.roll(self.action, 1, axis=0)
@@ -126,9 +141,10 @@ class TrackingEnv(gym.Env):
 
         # Step 5, prepare the observation and return the result
         observation = np.array(
-            [*self.state[0], self.trk_params.F_supp], dtype=np.float32
+            [*self.state[0, 1:], self.action[0, 0], self.trk_params.F_supp],
+            dtype=np.float32,
         )
-        reward = -np.abs(self.state[0, 3])
+        reward = self._calculate_reward_()
         terminated = self.i == len(self.reference) - 1
 
         return observation, reward, terminated, truncated, dict()
@@ -138,6 +154,39 @@ class TrackingEnv(gym.Env):
 
     def close(self):
         pass
+
+    def _calculate_reward_(self):
+        # The reward is as follows:
+        # [Penalty] |trolley state - prev reference state|
+        # [Penalty] |Force|
+        # [Reward] |previous angle| - |angle now|
+        # [Reward] [(trolley state - last trolley state)*sign(reference - trolley state) - abs(reference - trolley state)] / l
+
+        PEN_TO_REF_FACTOR = 5.0
+        PEN_FORCE_FACTOR = 2.5
+        REW_ANG_FACTOR = 30.0
+        REW_CLOSE_FACTOR = 20.0
+        REW_TRACK_FACTOR = 5.0
+
+        pen_to_ref = -np.abs(self.state[0, 0] - self.reference[self.i - 1])
+        pen_force_factor = -np.abs(self.action[0, 0])
+        rew_ang = np.deg2rad(3) - np.abs(self.state[0, 3])
+
+        rew_close = np.abs(self.state[0, 3]) - np.abs(self.state[1, 3])
+        rew_track = self.trk_params.l - np.abs(
+            self.reference[self.i] - self.state[0, 0]
+        )
+
+        return (
+            PEN_TO_REF_FACTOR * pen_to_ref
+            + PEN_FORCE_FACTOR * pen_force_factor
+            + REW_ANG_FACTOR * rew_ang
+            + REW_CLOSE_FACTOR * rew_close
+            + REW_TRACK_FACTOR * rew_track
+        )
+
+        # return -(((self.state[0, 0] - self.reference[self.i]) / self.trk_params.l) ** 2)
+        # return -np.abs(self.state[0, 3])
 
     def _calculate_rhs_(self):
         reference_states = np.array(
@@ -162,6 +211,9 @@ class TrackingEnv(gym.Env):
         )
         # Calculate theta = arcsin((x_p-x_t)/l)
         if np.abs(self.reference[self.i] - self.state[0, 0]) > self.trk_params.l:
+            self.state[0, 3] = (
+                np.sign(self.reference[self.i] - self.state[0, 0]) * np.pi / 2
+            )
             return False
         self.state[0, 3] = np.arcsin(
             (self.reference[self.i] - self.state[0, 0]) / self.trk_params.l
@@ -169,11 +221,7 @@ class TrackingEnv(gym.Env):
         return True
 
     def _generate_reference_(self, p: float = 0.5, size=TRACKING_PATH_LEN):
-        samples = (
-            (2 * self.np_random.binomial(n=1, p=p, size=size) - 1.0)
-            * TRACKING_MAX_VEL
-            * self.T
-        )
+        samples = self.np_random.normal(0.1, 1) * TRACKING_MAX_VEL * self.T
         samples[0] = 0
         for i in range(1, len(samples)):
             samples[i] += samples[i - 1]

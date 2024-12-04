@@ -29,10 +29,15 @@ def rollout(
     while not done:
         o_for_agent = o.copy()
         from ..policies.policy_gradient import PGPolicy
+        from ..common.policy_defs import GenericACAgent
 
         if isinstance(agent, PGPolicy):
             o_for_agent = torch.from_numpy(o_for_agent[None]).to(device).float()
             action, _, _ = agent(o_for_agent)
+            action = action.cpu().detach().numpy()[0]
+        elif not isinstance(agent, GenericACAgent):
+            o_for_agent = torch.from_numpy(o_for_agent[None]).to(device).float()
+            action = agent(o_for_agent)
             action = action.cpu().detach().numpy()[0]
         else:
             with eval_mode(agent):

@@ -6,7 +6,7 @@ import numpy as np
 import copy
 import abc
 import math
-from global_vars import device
+from .global_vars import device
 from ..utils.layers import soft_update_params, weight_init, network_injector
 
 
@@ -210,17 +210,17 @@ class GenericACAgent:
         action_dim,
         action_range,
         device,
-        discount,
-        actor_lr,
-        critic_lr,
-        critic_tau,
-        batch_size,
+        discount=0.99,
+        actor_lr=3e-4,
+        critic_lr=3e-4,
+        critic_tau=5e-3,
+        batch_size=256,
         init_temperature=None,
         alpha_lr=None,
         target_entropy=None,
         double_critic=False,
         temperature=False,
-        hidden_dim=1024,
+        hidden_dim=256,
         hidden_depth=2,
     ):
         super().__init__()

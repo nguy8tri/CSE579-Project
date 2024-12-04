@@ -1,4 +1,7 @@
 import numpy as np
+import torch
+
+from ..utils.layers import TrackingLayer
 
 from ..gyms.tracking import TrackingParameters
 
@@ -8,7 +11,7 @@ from typing import Tuple, Iterable
 class TrackingReferencePolicy:
     def __init__(
         self,
-        trk_params: TrackingParameters,
+        trk_params: TrackingParameters = TrackingParameters(),
         settling_time: float = 0.1,
         overshoot: float = 0.05,
     ):
@@ -20,6 +23,7 @@ class TrackingReferencePolicy:
             overshoot (float, optional): The overshoot fraction to tune to. Defaults to 0.05.
         """
         self.optimize(trk_params, settling_time, overshoot)
+        self.layer = TrackingLayer(self)
 
     def __call__(self, observation: Iterable[float]) -> float:
         """Executes the policy
@@ -33,11 +37,15 @@ class TrackingReferencePolicy:
         Returns:
             float: The action corresponding to the observation
         """
-        return -(self.K * observation[-2] + self.B * observation[1])
+        result = self.layer(torch.tensor(observation))
+        if len(result.shape) == 1:
+            return result[0]
+        else:
+            return result[:, 0].view(len(result), 1)
 
     def optimize(
         self,
-        trk_params: TrackingParameters,
+        trk_params: TrackingParameters = TrackingParameters,
         settling_time: float = 0.1,
         overshoot: float = 0.05,
     ) -> Tuple[float, float, float]:

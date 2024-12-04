@@ -25,6 +25,25 @@ def mlp(
     return trunk
 
 
+class TrackingLayer(nn.Module):
+    def __init__(self, reference_controller):
+        super().__init__()
+
+        self.weight = nn.Parameter(
+            torch.tensor(
+                [
+                    [-reference_controller.B, 0, -reference_controller.K, 0, 0],
+                    [-5, 0, -5, 0, 0],
+                ],
+                requires_grad=True,
+            )
+        )
+
+    def forward(self, x):
+        result = torch.matmul(x, self.weight.T.float())
+        return result
+
+
 class ElmanRNN(nn.Module):
     def __init__(
         self,
@@ -53,17 +72,24 @@ class ElmanRNN(nn.Module):
 
 
 def network_injector(
-    num_inputs, hidden_size=64, output_size=1, hidden_depth=2, network="rnn"
+    num_inputs,
+    hidden_size=64,
+    output_size=1,
+    hidden_depth=2,
+    network="rnn",
+    reference_controller=None,
 ):
     if network == "rnn":
         return ElmanRNN(num_inputs, hidden_size, output_size, hidden_depth)
+    if reference_controller is not None:
+        return TrackingLayer(reference_controller)
     return mlp(num_inputs, hidden_size, output_size, hidden_depth)
 
 
 def weight_init(m):
     """Custom weight init for Linear layers."""
     if isinstance(m, nn.Linear):
-        m.weight.data.fill_(20.0)
+        nn.init.orthogonal_(m.weight.data)
         if hasattr(m.bias, "data"):
             m.bias.data.fill_(0.0)
 
