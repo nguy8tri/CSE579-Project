@@ -36,14 +36,14 @@ def generate_random_reference(T=0.005):
 functions = [
     lambda x: x,
     lambda x: x * x,
-    lambda x: np.sin(x),
+    lambda x: np.sin(2 * np.pi * x / 3),
     lambda x: np.tan(0.4 * x),
 ]
 
 references = (
     [reference]
     + [generate_testing_reference(fun) for fun in functions]
-    + [generate_random_reference() for _ in range(4)]
+    + [generate_random_reference() for _ in range(1)]
 )
 
 
@@ -89,7 +89,7 @@ def evaluate(policy_path, plot_path, title):
     # Get initial tracking params
     trk_params = TrackingParameters()
 
-    fig, axs = plt.subplots(3, 3)
+    fig, axs = plt.subplots(2, 3)
     fig.suptitle(title)
     fig.supylabel("Position (m)")
     fig.supxlabel("Time (s)")
